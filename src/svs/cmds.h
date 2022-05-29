@@ -5,4 +5,3 @@ void cmd_init(int, char**);
 void cmd_add(int, char**);
 
 #endif
-

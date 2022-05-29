@@ -1,63 +1,72 @@
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <limits.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <fcntl.h>
-#include <errno.h>
+#include <unistd.h>
 
 typedef struct {
     char* path;
+    uint16_t flags;
     mode_t mode;
     char* content;
+    int16_t content_length;
 } InitFileTemplate;
 
-static InitFileTemplate 
-init_template[] = {
-    {".svs", S_IFDIR, 0},
-    {".svs/branches", S_IFDIR, 0},
-    {".svs/objects", S_IFDIR, 0},
-    {".svs/refs", S_IFDIR, 0},
-    {".svs/refs/tags", S_IFDIR, 0},
-    {".svs/refs/heads", S_IFDIR, 0},
-    {".svs/refs/heads/HEAD", S_IFREG, "ref: ref/heads/master"}
-};
+static InitFileTemplate init_template[] = {
+    {"/.svs", 0, S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH, 0, 0},
+    {"/.svs/branches", 0, S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH, 0, 0},
+    {"/.svs/objects", 0, S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH, 0, 0},
+    {"/.svs/refs", 0, S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH, 0, 0},
+    {"/.svs/refs/tags", 0, S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH, 0, 0},
+    {"/.svs/refs/heads", 0, S_IFDIR | S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH, 0, 0},
+    {"/.svs/refs/heads/HEAD",
+     O_CREAT | O_WRONLY,
+     S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH,
+     "ref: ref/heads/master",
+     21}};
 
-void cmd_init(int argc, char** argv) {
-    int bufsize = 200;
-    char* cwd = malloc(bufsize);
+void
+cmd_init(int argc, char** argv) {
+    char* cwd;
+    int8_t init_template_length = sizeof(init_template) / sizeof(InitFileTemplate);
 
-    for (;; bufsize *= 2) {
-        if(getcwd(cwd, sizeof(cwd)) == NULL) {
-            bufsize += PATH_MAX;
-            cwd = realloc(cwd, bufsize);
-        }
-
-        printf("%d\n", bufsize);
-
-        if (errno != ERANGE) {
-            break;
-        }
+    if ((cwd = getcwd(NULL, 0)) == NULL) {
+        perror("failed to get the current working directory\n");
     }
 
-    printf("%s", cwd);
+    for (int i = 0; i < init_template_length; i++) {
+        int16_t path_length = sizeof(cwd) + sizeof(init_template[i].path);
+        char* buffer = (char*) malloc(sizeof(char*) * path_length);
 
-    /* for (int i = 0; i < sizeof(init_template) / sizeof(InitFileTemplate); i++) { */
-        /* if(mkdir(strcat(cwd, init_template[i].path), init_template[i].mode) != EXIT_SUCCESS) { */
-            /* perror("error to init the repo\n"); */
-        /* } */
+        memcpy(buffer, cwd, sizeof(char*) * sizeof(cwd));
 
-        /* if(init_template[i].content) { */
-            /* int fd = open(init_template[i].path, O_WRONLY); */
+        if (init_template[i].flags != 0) {
+            int fd;
 
-            /* if(write(fd, init_template[i].content, sizeof(init_template[i].content)) != sizeof(init_template[i].content)) { */
-                /* perror("error to write on init files\n"); */
-            /* } */
-        /* } */
-    /* } */
+            if ((fd = open(strcat(buffer, init_template[i].path), init_template[i].flags, init_template[i].mode))
+                == -1) {
+                perror("error to init the file content\n");
+            }
+
+            if (init_template[i].content) {
+                if (write(fd, init_template[i].content, init_template[i].content_length)
+                    != init_template[i].content_length) {
+                    perror("error to write on init files\n");
+                }
+            }
+            // @@@: do nothing if the directory exists
+        } else if (mkdir(strcat(buffer, init_template[i].path), init_template[i].mode) != 0) {
+            perror("error to init the repo\n");
+        }
+
+        free(buffer);
+    }
 
     free(cwd);
 }
